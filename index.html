@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FX Airguns — Safety Log</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800&family=Barlow:wght@400;500;600&display=swap');
+  :root {
+    --bg:#0f1012; --surface:#181a1e; --surface2:#1f2227; --border:#2a2d35; --gold:#f0b429;
+    --text:#e8eaed; --muted:#8a8f9a; --dim:#555a66;
+    --red:#e06060; --red-bg:#3a0d0d; --red-b:#7a2020;
+    --green:#6dcc6d; --green-bg:#0d2a0d; --green-b:#1a5a1a;
+    --amber:#f0a030; --amber-bg:#2a1800; --amber-b:#6a3a00;
+    --blue:#5badec; --blue-bg:#0d2238; --blue-b:#1a4a7a;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:"Barlow",sans-serif; font-size:14px; min-height:100vh; }
+  button { font-family:inherit; cursor:pointer; }
+  input, select, textarea { font-family:inherit; font-size:14px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:7px 9px; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--gold); }
+  a { color:var(--blue); }
+
+  .hdr { background:var(--surface); border-bottom:2px solid var(--border); padding:10px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; gap:12px; flex-wrap:wrap; }
+  .hdr h1 { font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:20px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .hdr h1 span { color:var(--red); }
+  .hdr-r { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .btn { background:var(--surface2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:7px 12px; font-size:13px; font-weight:600; }
+  .btn:hover { border-color:var(--gold); }
+  .btn.gold { background:#2a2005; border-color:#6a5010; color:var(--gold); }
+  .btn.red { background:var(--red-bg); border-color:var(--red-b); color:var(--red); }
+  .btn:disabled { opacity:.5; cursor:wait; }
+  .sync { font-family:"Barlow Condensed",sans-serif; font-size:12px; font-weight:600; padding:3px 9px; border-radius:20px; background:var(--blue-bg); color:var(--blue); }
+  .sync.ok { background:var(--green-bg); color:var(--green); }
+  .sync.err { background:var(--red-bg); color:var(--red); }
+
+  .stats { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:1px; background:var(--border); border-bottom:1px solid var(--border); }
+  .stat { background:var(--surface); padding:8px 16px; cursor:pointer; }
+  .stat:hover { background:var(--surface2); }
+  .stat-n { font-family:"Barlow Condensed",sans-serif; font-size:30px; font-weight:800; line-height:1; }
+  .stat-l { font-family:"Barlow Condensed",sans-serif; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); }
+
+  .bar { display:flex; gap:8px; padding:12px 20px; flex-wrap:wrap; align-items:center; border-bottom:1px solid var(--border); }
+  .bar input[type=search] { min-width:240px; flex:1; max-width:420px; }
+  .bar label { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+  .count { color:var(--dim); font-size:12px; margin-left:auto; }
+
+  .wrap { padding:0 20px 40px; overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; min-width:1100px; }
+  th { text-align:left; font-family:"Barlow Condensed",sans-serif; font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); padding:8px; border-bottom:2px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; }
+  th.nosort { cursor:default; }
+  td { padding:9px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr.row { cursor:pointer; }
+  tr.row:hover td { background:var(--surface); }
+  tr.row.flash td { animation:flash 1.6s ease-out; }
+  @keyframes flash { from { background:#2a2005; } to { background:transparent; } }
+  .tkt { font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:15px; white-space:nowrap; }
+  .what { color:#c8cbd1; max-width:420px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .dim { color:var(--dim); }
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; border:1px solid; white-space:nowrap; }
+  .p-yes { background:var(--red-bg); color:var(--red); border-color:var(--red-b); }
+  .p-no { background:var(--green-bg); color:var(--green); border-color:var(--green-b); }
+  .p-unk { background:var(--surface2); color:var(--muted); border-color:var(--border); }
+  .p-ai { border-style:dashed; }
+  .p-open { background:var(--amber-bg); color:var(--amber); border-color:var(--amber-b); }
+  .p-closed { background:var(--surface2); color:var(--muted); border-color:var(--border); }
+  .tag { display:inline-block; font-size:11px; color:var(--muted); background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:1px 6px; margin:0 3px 3px 0; }
+  .warn { color:var(--amber); font-size:12px; }
+  .empty { text-align:center; color:var(--dim); padding:50px 10px; }
+
+  .ov { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:flex-start; justify-content:center; z-index:200; overflow-y:auto; padding:40px 12px; }
+  .ov.open { display:flex; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:10px; width:100%; max-width:760px; padding:20px 22px; }
+  .modal.small { max-width:520px; }
+  .m-hdr { display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:14px; }
+  .m-hdr h2 { font-family:"Barlow Condensed",sans-serif; font-size:22px; font-weight:700; letter-spacing:.04em; }
+  .m-sub { color:var(--muted); font-size:12px; margin-top:2px; }
+  .x { background:none; border:none; color:var(--muted); font-size:22px; line-height:1; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .full { grid-column:1 / -1; }
+  .lbl { font-family:"Barlow Condensed",sans-serif; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:4px; display:block; }
+  .fld input, .fld select, .fld textarea { width:100%; }
+  textarea { resize:vertical; min-height:70px; line-height:1.45; }
+  .ai-note { font-size:11px; color:var(--amber); margin-top:4px; }
+  .ai-note button { background:none; border:none; color:var(--gold); text-decoration:underline; font-size:11px; padding:0; margin-left:4px; }
+  .m-foot { display:flex; justify-content:space-between; align-items:center; margin-top:18px; gap:10px; flex-wrap:wrap; }
+  .m-msg { font-size:12px; color:var(--muted); min-height:16px; }
+  .m-msg.err { color:var(--red); }
+  .m-msg.ok { color:var(--green); }
+  .meta { font-size:11px; color:var(--dim); margin-top:12px; line-height:1.6; }
+  .section { border-top:1px solid var(--border); margin-top:16px; padding-top:14px; }
+  .section h3 { font-family:"Barlow Condensed",sans-serif; font-size:15px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+  .rcp { display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); }
+  .rcp .em { flex:1; }
+  .prog { height:6px; background:var(--surface2); border-radius:4px; overflow:hidden; margin:10px 0; }
+  .prog div { height:100%; background:var(--gold); width:0; transition:width .4s; }
+
+  .auth { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:300; }
+  .auth.hidden { display:none; }
+  .auth-box { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:26px; width:320px; display:flex; flex-direction:column; gap:10px; }
+  .auth-box h2 { font-family:"Barlow Condensed",sans-serif; font-size:22px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .auth-err { color:var(--red); font-size:12px; min-height:14px; }
+  .denied { display:none; padding:80px 20px; text-align:center; color:var(--muted); }
+
+  @media (max-width:800px) { .stats { grid-template-columns:repeat(3, minmax(0,1fr)); } .grid2 { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<div class="auth" id="auth">
+  <div class="auth-box">
+    <h2>Safety Log</h2>
+    <input type="email" id="auth-email" placeholder="Email" autocomplete="username">
+    <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+    <div class="auth-err" id="auth-err"></div>
+    <button class="btn gold" id="auth-btn" onclick="signIn()">Sign In</button>
+  </div>
+</div>
+
+<div class="denied" id="denied">The Safety Log is not available for this login.</div>
+
+<div id="app" style="display:none">
+  <div class="hdr">
+    <h1><span>⚠</span> Safety Log</h1>
+    <div class="hdr-r">
+      <span class="sync" id="sync">Loading…</span>
+      <button class="btn" onclick="openAdd()">＋ Add by ticket #</button>
+      <button class="btn" onclick="openImport()">⇩ Import existing</button>
+      <button class="btn" onclick="openSettings()">⚙ Settings</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat" onclick="quick('all')"><div class="stat-n" id="s-all">0</div><div class="stat-l">Entries</div></div>
+    <div class="stat" onclick="quick('open')"><div class="stat-n" style="color:var(--amber)" id="s-open">0</div><div class="stat-l">Open</div></div>
+    <div class="stat" onclick="quick('injury')"><div class="stat-n" style="color:var(--red)" id="s-inj">0</div><div class="stat-l">Injury</div></div>
+    <div class="stat" onclick="quick('unconfirmed')"><div class="stat-n" style="color:var(--gold)" id="s-unc">0</div><div class="stat-l">To confirm</div></div>
+    <div class="stat" onclick="quick('sheet')"><div class="stat-n" style="color:var(--muted)" id="s-sheet">0</div><div class="stat-l">Spreadsheet problems</div></div>
+  </div>
+
+  <div class="bar">
+    <input type="search" id="q" placeholder="Search ticket #, customer, product, serial, what happened, tags…" oninput="render()">
+    <label>Status <select id="f-status" onchange="render()"><option value="">All</option><option>Open</option><option>Closed</option></select></label>
+    <label>Injury <select id="f-inj" onchange="render()"><option value="">All</option><option>Yes</option><option>No</option><option>Unknown</option></select></label>
+    <label>Tag <select id="f-tag" onchange="render()"><option value="">All</option></select></label>
+    <label>From <input type="date" id="f-from" onchange="render()"></label>
+    <label>To <input type="date" id="f-to" onchange="render()"></label>
+    <button class="btn" onclick="clearFilters()">Clear</button>
+    <span class="count" id="count"></span>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <thead><tr>
+        <th onclick="sortBy('reported_on')">Date</th>
+        <th onclick="sortBy('ticket_number')">Ticket #</th>
+        <th onclick="sortBy('customer')">Customer</th>
+        <th onclick="sortBy('product')">Product</th>
+        <th onclick="sortBy('serial')">Serial</th>
+        <th class="nosort">What happened</th>
+        <th onclick="sortBy('injury')">Injury</th>
+        <th onclick="sortBy('damage')">Damage</th>
+        <th onclick="sortBy('status')">Status</th>
+        <th class="nosort">Tags</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none"></div>
+  </div>
+</div>
+
+<!-- Edit entry -->
+<div class="ov" id="ov-edit" onclick="if(event.target===this)closeEdit()">
+  <div class="modal">
+    <div class="m-hdr">
+      <div>
+        <h2 id="e-title">Ticket</h2>
+        <div class="m-sub" id="e-sub"></div>
+      </div>
+      <button class="x" onclick="closeEdit()">×</button>
+    </div>
+    <div class="grid2">
+      <div class="fld"><span class="lbl">Date reported</span><input type="date" id="e-date"></div>
+      <div class="fld"><span class="lbl">Status</span><select id="e-status"><option>Open</option><option>Closed</option></select></div>
+      <div class="fld"><span class="lbl">Customer</span><input type="text" id="e-customer"></div>
+      <div class="fld"><span class="lbl">Product</span><input type="text" id="e-product"></div>
+      <div class="fld"><span class="lbl">Serial</span><input type="text" id="e-serial"></div>
+      <div class="fld"><span class="lbl">Tags (from Freshdesk)</span><div id="e-tags" style="padding-top:6px"></div></div>
+      <div class="fld full"><span class="lbl">What happened</span><textarea id="e-summary" rows="4"></textarea></div>
+      <div class="fld"><span class="lbl">Injury</span>
+        <select id="e-injury" onchange="markConfirmed('injury')"><option>Unknown</option><option>Yes</option><option>No</option></select>
+        <div class="ai-note" id="e-injury-note"></div>
+      </div>
+      <div class="fld"><span class="lbl">Property damage</span>
+        <select id="e-damage" onchange="markConfirmed('damage')"><option>Unknown</option><option>Yes</option><option>No</option></select>
+        <div class="ai-note" id="e-damage-note"></div>
+      </div>
+      <div class="fld full"><span class="lbl">Action taken / outcome</span><textarea id="e-action" rows="3"></textarea></div>
+    </div>
+    <div class="meta" id="e-meta"></div>
+    <div class="m-foot">
+      <button class="btn red" onclick="deleteEntry()">Delete entry</button>
+      <span class="m-msg" id="e-msg"></span>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeEdit()">Cancel</button>
+        <button class="btn gold" id="e-save" onclick="saveEdit()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add by ticket # -->
+<div class="ov" id="ov-add" onclick="if(event.target===this)closeOv('ov-add')">
+  <div class="modal small">
+    <div class="m-hdr"><div><h2>Add by ticket #</h2><div class="m-sub">For a ticket the import can't see, such as an archived one. The "safety" tag and group aren't checked here.</div></div><button class="x" onclick="closeOv('ov-add')">×</button></div>
+    <div class="fld"><span class="lbl">Freshdesk ticket #</span><input type="text" id="a-ticket" inputmode="numeric" onkeydown="if(event.key==='Enter')addTicket()"></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--muted);font-size:13px"><input type="checkbox" id="a-email"> Also send the safety email (only for a new case)</label>
+    <div class="m-foot"><span class="m-msg" id="a-msg"></span><button class="btn gold" id="a-btn" onclick="addTicket()">Add to the log</button></div>
+  </div>
+</div>
+
+<!-- Import -->
+<div class="ov" id="ov-import" onclick="if(event.target===this)closeOv('ov-import')">
+  <div class="modal small">
+    <div class="m-hdr"><div><h2>Import existing safety tickets</h2><div class="m-sub" id="i-sub">Finds every ticket tagged "safety" in the group, open or closed, and adds the ones not in the log yet. No emails are sent.</div></div><button class="x" onclick="closeOv('ov-import')">×</button></div>
+    <div class="prog"><div id="i-bar"></div></div>
+    <div class="m-msg" id="i-msg">Ready.</div>
+    <div class="m-foot"><span></span><button class="btn gold" id="i-btn" onclick="startImport()">Start import</button></div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="ov" id="ov-settings" onclick="if(event.target===this)closeOv('ov-settings')">
+  <div class="modal small">
+    <div class="m-hdr"><div><h2>Settings</h2></div><button class="x" onclick="closeOv('ov-settings')">×</button></div>
+    <h3 class="lbl" style="margin-bottom:6px">Freshdesk group to watch</h3>
+    <div style="display:flex;gap:8px"><select id="st-group" style="flex:1"><option>Loading…</option></select><button class="btn gold" onclick="saveGroup()">Save</button></div>
+    <div class="m-msg" id="st-gmsg" style="margin-top:6px"></div>
+    <div class="section">
+      <h3>Who gets the safety email</h3>
+      <div id="st-rcps"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input type="text" id="st-name" placeholder="Name" style="width:120px">
+        <input type="email" id="st-email" placeholder="email@fxairguns.com" style="flex:1" onkeydown="if(event.key==='Enter')addRecipient()">
+        <button class="btn" onclick="addRecipient()">Add</button>
+      </div>
+      <div class="m-msg" id="st-rmsg" style="margin-top:6px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://rhvmzaljkgqnwjcstnen.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJodm16YWxqa2dxbndqY3N0bmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MTA0OTksImV4cCI6MjA5NzI4NjQ5OX0.3qPGkA9tyvTDWqPQrBjJUnp9_PzNxBJQ-NCv2dUo2DE';
+const SERVER = 'https://fx-tracking-server.onrender.com';
+const ADMIN_EMAIL = 'shyam.patel@fxairguns.com';
+const FRESHDESK = 'https://fxairguns.freshdesk.com/a/tickets/';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { autoRefreshToken: (window.parent === window) } });
+
+let E = [];               // entries
+let me = '';
+let started = false;
+let editing = null;       // the entry open in the edit window (a copy)
+let sortKey = 'reported_on', sortDir = -1;
+let quickFilter = '';
+let channel = null;
+
+// ── Login (same as the other apps; inside the Shell it uses the Shell's login) ──
+async function signIn() {
+  const email = document.getElementById('auth-email').value.trim();
+  const pw = document.getElementById('auth-password').value;
+  const err = document.getElementById('auth-err'), btn = document.getElementById('auth-btn');
+  err.textContent = '';
+  if (!email || !pw) { err.textContent = 'Enter your email and password.'; return; }
+  btn.disabled = true;
+  const { error } = await sb.auth.signInWithPassword({ email, password: pw });
+  btn.disabled = false;
+  if (error) err.textContent = 'Login failed — check your email and password.';
+}
+document.getElementById('auth-password').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
+
+function onSession(session) {
+  if (!session) { document.getElementById('auth').classList.remove('hidden'); return; }
+  document.getElementById('auth').classList.add('hidden');
+  me = String(session.user.email || '').toLowerCase();
+  if (me !== ADMIN_EMAIL) {
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('denied').style.display = 'block';
+    return;
+  }
+  document.getElementById('denied').style.display = 'none';
+  document.getElementById('app').style.display = '';
+  if (!started) { started = true; loadAll(); listen(); }
+}
+sb.auth.onAuthStateChange((ev, session) => onSession(session));
+sb.auth.getSession().then(({ data }) => onSession(data.session));
+
+const SHELL_ORIGIN = 'https://fxairguns.netlify.app';
+window.addEventListener('message', async (event) => {
+  if (event.origin !== SHELL_ORIGIN) return;
+  if (event.data && event.data.type === 'FX_AUTH_SESSION') {
+    await sb.auth.setSession({ access_token: event.data.access_token, refresh_token: event.data.refresh_token });
+  } else if (event.data && event.data.type === 'FX_AUTH_LOGOUT') {
+    await sb.auth.signOut();
+  }
+});
+if (window.parent !== window) window.parent.postMessage({ type: 'FX_AUTH_READY' }, SHELL_ORIGIN);
+
+// ── Helpers ──
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+function fmtDate(d) {
+  if (!d) return '';
+  const p = String(d).slice(0, 10).split('-');
+  return p.length === 3 ? `${p[1]}/${p[2]}/${p[0]}` : d;
+}
+function fmtTime(ts) { return ts ? new Date(ts).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : ''; }
+function setSync(cls, msg) { const el = document.getElementById('sync'); el.className = 'sync ' + (cls || ''); el.textContent = msg; }
+async function token() { const { data } = await sb.auth.getSession(); return data.session ? data.session.access_token : ''; }
+async function api(path, method, body) {
+  const res = await fetch(SERVER + path, {
+    method: method || 'GET',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + await token() },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(out.error || ('Server error ' + res.status));
+  return out;
+}
+function pillYN(v, confirmed) {
+  const cls = v === 'Yes' ? 'p-yes' : v === 'No' ? 'p-no' : 'p-unk';
+  const ai = v !== 'Unknown' && !confirmed;
+  return `<span class="pill ${cls}${ai ? ' p-ai' : ''}" title="${ai ? 'AI suggestion — not confirmed yet' : ''}">${esc(v)}${ai ? ' · AI' : ''}</span>`;
+}
+function closeOv(id) { document.getElementById(id).classList.remove('open'); }
+function openOv(id) { document.getElementById(id).classList.add('open'); }
+
+// ── Load + live updates ──
+async function loadAll() {
+  setSync('', 'Loading…');
+  const { data, error } = await sb.from('safety_log').select('*');
+  if (error) { setSync('err', 'Load failed: ' + error.message); return; }
+  E = data || [];
+  setSync('ok', 'Up to date');
+  fillTagFilter();
+  render();
+}
+function listen() {
+  channel = sb.channel('safety-log-changes')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'safety_log' }, payload => {
+      if (payload.eventType === 'DELETE') {
+        const id = payload.old && payload.old.id;
+        E = E.filter(x => x.id !== id);
+      } else {
+        const row = payload.new, i = E.findIndex(x => x.id === row.id);
+        if (i === -1) E.push(row); else E[i] = row;
+        flashId = row.id;
+        if (editing && editing.id === row.id) refreshEditMeta(row);
+      }
+      fillTagFilter();
+      render();
+    })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED') setSync('ok', 'Live');
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setSync('err', 'Live updates off — refresh');
+    });
+}
+// Catch up after the computer wakes or the tab comes back
+document.addEventListener('visibilitychange', () => { if (!document.hidden && started && !editing) loadAll(); });
+
+// ── Table ──
+let flashId = null;
+function fillTagFilter() {
+  const sel = document.getElementById('f-tag'), cur = sel.value;
+  const tags = [...new Set(E.flatMap(x => x.tags || []).map(t => String(t).toLowerCase()))].filter(t => t !== 'safety').sort();
+  sel.innerHTML = '<option value="">All</option>' + tags.map(t => `<option ${t === cur ? 'selected' : ''}>${esc(t)}</option>`).join('');
+}
+function quick(k) {
+  quickFilter = (k === 'all' || quickFilter === k) ? '' : k;
+  render();
+}
+function clearFilters() {
+  ['q','f-status','f-inj','f-tag','f-from','f-to'].forEach(id => document.getElementById(id).value = '');
+  quickFilter = '';
+  render();
+}
+function sortBy(k) {
+  if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = (k === 'reported_on' || k === 'ticket_number') ? -1 : 1; }
+  render();
+}
+function filtered() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const st = document.getElementById('f-status').value, inj = document.getElementById('f-inj').value;
+  const tag = document.getElementById('f-tag').value, from = document.getElementById('f-from').value, to = document.getElementById('f-to').value;
+  return E.filter(x => {
+    if (st && x.status !== st) return false;
+    if (inj && x.injury !== inj) return false;
+    if (tag && !(x.tags || []).some(t => String(t).toLowerCase() === tag)) return false;
+    if (from && (!x.reported_on || x.reported_on < from)) return false;
+    if (to && (!x.reported_on || x.reported_on > to)) return false;
+    if (quickFilter === 'open' && x.status !== 'Open') return false;
+    if (quickFilter === 'injury' && x.injury !== 'Yes') return false;
+    if (quickFilter === 'unconfirmed' && !needsConfirm(x)) return false;
+    if (quickFilter === 'sheet' && !x.excel_error) return false;
+    if (q) {
+      const hay = [x.ticket_number, x.customer, x.product, x.serial, x.summary, x.action_taken, (x.tags || []).join(' ')].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+function needsConfirm(x) { return (x.injury !== 'Unknown' && !x.injury_confirmed) || (x.damage !== 'Unknown' && !x.damage_confirmed); }
+function render() {
+  document.getElementById('s-all').textContent = E.length;
+  document.getElementById('s-open').textContent = E.filter(x => x.status === 'Open').length;
+  document.getElementById('s-inj').textContent = E.filter(x => x.injury === 'Yes').length;
+  document.getElementById('s-unc').textContent = E.filter(needsConfirm).length;
+  document.getElementById('s-sheet').textContent = E.filter(x => x.excel_error).length;
+
+  const list = filtered().sort((a, b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (sortKey === 'ticket_number') { va = Number(va) || 0; vb = Number(vb) || 0; }
+    else { va = String(va || '').toLowerCase(); vb = String(vb || '').toLowerCase(); }
+    if (va < vb) return -sortDir;
+    if (va > vb) return sortDir;
+    return (Number(b.ticket_number) || 0) - (Number(a.ticket_number) || 0);
+  });
+  document.getElementById('count').textContent = list.length === E.length ? `${E.length} entries` : `${list.length} of ${E.length} entries` + (quickFilter ? ' (click the box again to clear)' : '');
+  const body = document.getElementById('rows');
+  body.innerHTML = list.map(x => `
+    <tr class="row${x.id === flashId ? ' flash' : ''}" onclick="openEdit(${x.id})">
+      <td style="white-space:nowrap">${esc(fmtDate(x.reported_on))}</td>
+      <td class="tkt"><a href="${FRESHDESK}${x.ticket_number}" target="_blank" rel="noopener" onclick="event.stopPropagation()">#${x.ticket_number}</a>${x.excel_error ? ' <span class="warn" title="Spreadsheet: ' + esc(x.excel_error) + '">⚠</span>' : ''}</td>
+      <td>${esc(x.customer) || '<span class="dim">—</span>'}</td>
+      <td>${esc(x.product) || '<span class="dim">—</span>'}</td>
+      <td>${esc(x.serial) || '<span class="dim">—</span>'}</td>
+      <td><div class="what">${esc(x.summary) || '<span class="dim">No summary yet</span>'}</div></td>
+      <td>${pillYN(x.injury, x.injury_confirmed)}</td>
+      <td>${pillYN(x.damage, x.damage_confirmed)}</td>
+      <td><span class="pill ${x.status === 'Open' ? 'p-open' : 'p-closed'}">${esc(x.status)}</span></td>
+      <td>${(x.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('')}</td>
+    </tr>`).join('');
+  flashId = null;
+  const empty = document.getElementById('empty');
+  if (!E.length) { empty.style.display = ''; empty.innerHTML = 'No safety entries yet.<br>Click <b>⇩ Import existing</b> to bring in tickets already tagged "safety".'; }
+  else if (!list.length) { empty.style.display = ''; empty.textContent = 'Nothing matches these filters.'; }
+  else empty.style.display = 'none';
+}
+
+// ── Edit an entry ──
+function openEdit(id) {
+  const x = E.find(r => r.id === id);
+  if (!x) return;
+  editing = JSON.parse(JSON.stringify(x));
+  document.getElementById('e-title').innerHTML = `Ticket <a href="${FRESHDESK}${x.ticket_number}" target="_blank" rel="noopener">#${x.ticket_number}</a>`;
+  document.getElementById('e-sub').textContent = [x.customer, x.product].filter(Boolean).join(' · ');
+  document.getElementById('e-date').value = x.reported_on || '';
+  document.getElementById('e-status').value = x.status || 'Open';
+  document.getElementById('e-customer').value = x.customer || '';
+  document.getElementById('e-product').value = x.product || '';
+  document.getElementById('e-serial').value = x.serial || '';
+  document.getElementById('e-summary').value = x.summary || '';
+  document.getElementById('e-injury').value = x.injury || 'Unknown';
+  document.getElementById('e-damage').value = x.damage || 'Unknown';
+  document.getElementById('e-action').value = x.action_taken || '';
+  document.getElementById('e-tags').innerHTML = (x.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('') || '<span class="dim">none</span>';
+  showAiNote('injury'); showAiNote('damage');
+  refreshEditMeta(x);
+  const msg = document.getElementById('e-msg'); msg.className = 'm-msg'; msg.textContent = '';
+  openOv('ov-edit');
+}
+function showAiNote(k) {
+  const el = document.getElementById('e-' + k + '-note');
+  const v = editing[k];
+  if (v !== 'Unknown' && !editing[k + '_confirmed']) el.innerHTML = 'AI suggestion, not confirmed. <button type="button" onclick="confirmAi(\'' + k + '\')">Confirm ' + esc(v) + '</button>';
+  else el.innerHTML = '';
+}
+function markConfirmed(k) { editing[k] = document.getElementById('e-' + k).value; editing[k + '_confirmed'] = true; showAiNote(k); }
+function confirmAi(k) { editing[k + '_confirmed'] = true; showAiNote(k); }
+function refreshEditMeta(row) {
+  const src = { freshdesk: 'Freshdesk rule', import: 'Import', 'backup check': 'Backup check', manual: 'Added by ticket #' }[row.source] || row.source;
+  const bits = [`Logged ${fmtTime(row.created_at)} by ${esc(src)}`];
+  bits.push(row.emailed_at ? `Safety email sent ${fmtTime(row.emailed_at)}` : 'No safety email sent');
+  if (row.excel_error) bits.push(`<span style="color:var(--amber)">Spreadsheet problem: ${esc(row.excel_error)} — saving again retries it</span>`);
+  else if (row.excel_synced_at) bits.push(`Spreadsheet updated ${fmtTime(row.excel_synced_at)}`);
+  if (row.updated_by && row.updated_by !== 'server') bits.push(`Last edited by ${esc(row.updated_by)} ${fmtTime(row.updated_at)}`);
+  document.getElementById('e-meta').innerHTML = bits.join('<br>');
+}
+function closeEdit() { editing = null; closeOv('ov-edit'); }
+async function saveEdit() {
+  if (!editing) return;
+  const ref = editing, btn = document.getElementById('e-save'), msg = document.getElementById('e-msg');
+  const patch = {
+    reported_on: document.getElementById('e-date').value || null,
+    status: document.getElementById('e-status').value,
+    customer: document.getElementById('e-customer').value.trim() || null,
+    product: document.getElementById('e-product').value.trim() || null,
+    serial: document.getElementById('e-serial').value.trim() || null,
+    summary: document.getElementById('e-summary').value.trim() || null,
+    injury: document.getElementById('e-injury').value,
+    injury_confirmed: !!ref.injury_confirmed,
+    damage: document.getElementById('e-damage').value,
+    damage_confirmed: !!ref.damage_confirmed,
+    action_taken: document.getElementById('e-action').value.trim() || null,
+    updated_by: me
+  };
+  btn.disabled = true; msg.className = 'm-msg'; msg.textContent = 'Saving…';
+  try {
+    const { data, error } = await sb.from('safety_log').update(patch).eq('id', ref.id).select().single();
+    if (error) throw new Error(error.message);
+    const i = E.findIndex(x => x.id === ref.id); if (i !== -1) E[i] = data;
+    render();
+    msg.textContent = 'Saved. Updating the spreadsheet…';
+    try {
+      await api('/safety/sync', 'POST', { id: ref.id });
+      if (editing === ref) closeEdit();
+    } catch (e) {
+      msg.className = 'm-msg err';
+      msg.textContent = 'Saved here, but the spreadsheet did not update: ' + e.message;
+    }
+  } catch (e) {
+    msg.className = 'm-msg err'; msg.textContent = 'Could not save: ' + e.message;
+  } finally { btn.disabled = false; }
+}
+async function deleteEntry() {
+  if (!editing) return;
+  const ref = editing;
+  if (!confirm(`Delete ticket #${ref.ticket_number} from the Safety Log?\n\nThe row in the spreadsheet stays (delete it there by hand if needed). The Freshdesk ticket isn't touched. If the ticket still has the "safety" tag, it may be added back by the next check.`)) return;
+  const { error } = await sb.from('safety_log').delete().eq('id', ref.id);
+  if (error) { const m = document.getElementById('e-msg'); m.className = 'm-msg err'; m.textContent = 'Could not delete: ' + error.message; return; }
+  E = E.filter(x => x.id !== ref.id);
+  closeEdit(); render();
+}
+
+// ── Add by ticket # ──
+function openAdd() {
+  document.getElementById('a-ticket').value = '';
+  document.getElementById('a-email').checked = false;
+  const m = document.getElementById('a-msg'); m.className = 'm-msg'; m.textContent = '';
+  openOv('ov-add');
+  setTimeout(() => document.getElementById('a-ticket').focus(), 50);
+}
+async function addTicket() {
+  const n = document.getElementById('a-ticket').value.replace(/[^0-9]/g, '');
+  const m = document.getElementById('a-msg'), btn = document.getElementById('a-btn');
+  if (!n) { m.className = 'm-msg err'; m.textContent = 'Type a ticket #.'; return; }
+  btn.disabled = true; m.className = 'm-msg'; m.textContent = 'Reading ticket #' + n + ' and writing the summary… (up to a minute)';
+  try {
+    const r = await api('/safety/add', 'POST', { ticket: n, email: document.getElementById('a-email').checked });
+    const words = { 'logged': 'Added to the log.', 'already in the log': 'That ticket is already in the log.', 'not found in Freshdesk': 'Freshdesk has no ticket #' + n + '.', 'already being logged': 'That ticket is being added right now.' };
+    m.className = 'm-msg ' + (r.result === 'logged' ? 'ok' : 'err');
+    m.textContent = (words[r.result] || r.result) + (r.result === 'logged' && r.sheet && r.sheet !== 'sent' ? ' Spreadsheet problem: ' + r.sheet : '') + (r.aiNote ? ' ' + r.aiNote : '');
+    if (r.result === 'logged') { document.getElementById('a-ticket').value = ''; loadAll(); }
+  } catch (e) {
+    m.className = 'm-msg err'; m.textContent = 'Could not add: ' + e.message;
+  } finally { btn.disabled = false; }
+}
+
+// ── Import ──
+let importTimer = null;
+async function openImport() {
+  openOv('ov-import');
+  try {
+    const st = await api('/safety/import-status');
+    showImport(st);
+    if (st.running) pollImport();
+  } catch (e) { document.getElementById('i-msg').textContent = e.message; }
+}
+async function startImport() {
+  const btn = document.getElementById('i-btn');
+  btn.disabled = true;
+  document.getElementById('i-msg').className = 'm-msg';
+  document.getElementById('i-msg').textContent = 'Searching Freshdesk…';
+  try { showImport(await api('/safety/import', 'POST')); pollImport(); }
+  catch (e) { btn.disabled = false; document.getElementById('i-msg').className = 'm-msg err'; document.getElementById('i-msg').textContent = 'Could not start: ' + e.message; }
+}
+function pollImport() {
+  clearTimeout(importTimer);
+  importTimer = setTimeout(async () => {
+    try {
+      const st = await api('/safety/import-status');
+      showImport(st);
+      if (st.running) pollImport(); else loadAll();
+    } catch (e) { pollImport(); }
+  }, 2000);
+}
+function showImport(st) {
+  const btn = document.getElementById('i-btn'), msg = document.getElementById('i-msg'), bar = document.getElementById('i-bar');
+  // Tickets already in the log are skipped up front; the rest are read one by one
+  const errs = (st.errors || []).length;
+  const alreadyIn = Math.max(0, (st.skipped || 0) - Math.max(0, (st.done || 0) - (st.logged || 0) - errs));
+  const todo = Math.max(0, (st.found || 0) - alreadyIn);
+  btn.disabled = !!st.running;
+  btn.textContent = st.finishedAt ? 'Run again' : 'Start import';
+  if (st.running) {
+    bar.style.width = (todo ? Math.round((st.done || 0) / todo * 100) : 5) + '%';
+    msg.className = 'm-msg';
+    msg.textContent = st.found
+      ? `Found ${st.found} "safety" tickets (${alreadyIn} already in the log). Adding ${todo}: ${st.done || 0} done, ${st.logged || 0} added. Each takes a few seconds.`
+      : 'Searching Freshdesk…';
+  } else if (st.finishedAt) {
+    bar.style.width = '100%';
+    msg.className = 'm-msg ' + (errs ? 'err' : 'ok');
+    let t = `Done. Found ${st.found} "safety" tickets; added ${st.logged}; ${st.skipped} were already in the log or skipped.`;
+    if (st.capped) t += ' Freshdesk only returns the first 300: use "Add by ticket #" for any that are missing.';
+    if (errs) t += ' Problems: ' + st.errors.slice(0, 5).join('; ');
+    msg.textContent = t;
+  } else {
+    bar.style.width = '0'; msg.className = 'm-msg'; msg.textContent = 'Ready.';
+  }
+}
+
+// ── Settings ──
+async function openSettings() {
+  openOv('ov-settings');
+  loadRecipients();
+  const sel = document.getElementById('st-group'), gm = document.getElementById('st-gmsg');
+  gm.className = 'm-msg'; gm.textContent = '';
+  const { data: set } = await sb.from('safety_settings').select('*').eq('id', 1).maybeSingle();
+  const current = set ? set.group_name : '';
+  sel.innerHTML = `<option>${esc(current || 'Loading…')}</option>`;
+  try {
+    const { groups } = await api('/safety/groups');
+    sel.innerHTML = groups.map(g => `<option ${g.name === current ? 'selected' : ''}>${esc(g.name)}</option>`).join('');
+    if (current && !groups.some(g => g.name === current)) { gm.className = 'm-msg err'; gm.textContent = `"${current}" is no longer a Freshdesk group — pick one and save.`; }
+  } catch (e) { gm.className = 'm-msg err'; gm.textContent = 'Could not load Freshdesk groups: ' + e.message; }
+}
+async function saveGroup() {
+  const name = document.getElementById('st-group').value, gm = document.getElementById('st-gmsg');
+  gm.className = 'm-msg'; gm.textContent = 'Saving…';
+  const { error } = await sb.from('safety_settings').update({ group_name: name, group_id: null, updated_at: new Date().toISOString() }).eq('id', 1);
+  if (error) { gm.className = 'm-msg err'; gm.textContent = error.message; return; }
+  try { await api('/safety/group-check', 'POST'); gm.className = 'm-msg ok'; gm.textContent = `Now watching "${name}". Update the group in the Freshdesk rule too.`; }
+  catch (e) { gm.className = 'm-msg err'; gm.textContent = e.message; }
+}
+async function loadRecipients() {
+  const box = document.getElementById('st-rcps');
+  const { data, error } = await sb.from('safety_recipients').select('*').order('created_at');
+  if (error) { box.innerHTML = `<div class="m-msg err">${esc(error.message)}</div>`; return; }
+  box.innerHTML = (data || []).map(r => `
+    <div class="rcp">
+      <input type="checkbox" ${r.active ? 'checked' : ''} title="Gets the email" onchange="toggleRecipient('${esc(r.email)}', this.checked)">
+      <span class="em">${esc(r.name || '')} <span class="dim">${esc(r.email)}</span></span>
+      <button class="btn" style="padding:3px 8px" onclick="removeRecipient('${esc(r.email)}')">Remove</button>
+    </div>`).join('') || '<div class="dim">Nobody yet.</div>';
+}
+async function toggleRecipient(email, on) {
+  const { error } = await sb.from('safety_recipients').update({ active: on }).eq('email', email);
+  rmsg(error ? error.message : (on ? 'Will get the email.' : 'Paused: won\'t get the email.'), !!error);
+}
+async function removeRecipient(email) {
+  if (!confirm('Remove ' + email + ' from the safety email?')) return;
+  const { error } = await sb.from('safety_recipients').delete().eq('email', email);
+  rmsg(error ? error.message : 'Removed.', !!error); loadRecipients();
+}
+async function addRecipient() {
+  const email = document.getElementById('st-email').value.trim().toLowerCase(), name = document.getElementById('st-name').value.trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { rmsg('Type a valid email address.', true); return; }
+  const { error } = await sb.from('safety_recipients').upsert({ email, name: name || null, active: true });
+  if (error) { rmsg(error.message, true); return; }
+  document.getElementById('st-email').value = ''; document.getElementById('st-name').value = '';
+  rmsg('Added.', false); loadRecipients();
+}
+function rmsg(t, bad) { const m = document.getElementById('st-rmsg'); m.className = 'm-msg ' + (bad ? 'err' : 'ok'); m.textContent = t; }
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  ['ov-add', 'ov-import', 'ov-settings'].forEach(closeOv);
+  if (editing) closeEdit();
+});
+</script>
+</body>
+</html>
